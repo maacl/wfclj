@@ -1,4 +1,11 @@
-(ns wfclj.core)
+(ns wfclj.core
+  (:require [clojure.inspector]))
+
+
+(def compass {[1 0]  :down
+              [-1 0] :up
+              [0 -1] :left
+              [0 1]  :right})
 
 (defn make-grid [x-dim y-dim tiles]
   (into {}
@@ -12,6 +19,8 @@
     (< x (dec max-x)) (conj [1 0])
     (> y 0) (conj [0 -1])
     (< y (dec max-y)) (conj [0 1])))
+
+
 
 (defn dimensions [matrix]
   [(count matrix)
@@ -58,12 +67,57 @@
   (set
    (mapcat (make-comp-mapper matrix) (coords matrix))))              
 
+(clojure.inspector/inspect-table
+(sort-by first
 (let [matrix input-matrix-1
       dims (dimensions matrix)]
-  (into #{}
-        (apply concat
-               (for [[x row] (map-indexed vector matrix)
-                     [y tile] (map-indexed vector row)]
-                 (for [[dx dy :as d] (valid-dirs [x y] dims)]
-                   (let [other-tile (get-in matrix [(+ x dx) (+ y dy)])]
-                     [tile other-tile d]))))))
+  (into
+   #{}
+   (apply concat
+          (for [[x row] (map-indexed vector matrix)
+                [y tile] (map-indexed vector row)]
+            (for [[dx dy :as d] (valid-dirs [x y] dims)]
+              (let [other-tile (get-in matrix [(+ x dx) (+ y dy)])]
+                [tile (get compass d) other-tile]))))))))
+
+(clojure.inspector/inspect-table
+(sort-by first
+(let [matrix input-matrix-1
+      dims (dimensions matrix)]
+  (into
+   #{}
+   (apply concat
+          (for [[x row] (map-indexed vector matrix)
+                [y tile] (map-indexed vector row)]
+            (for [[dx dy :as d] (valid-dirs [x y] dims)]
+              [x y (get compass d)])))))))
+
+
+
+(defn make-grid [x-dim y-dim tiles]
+  (into {}
+        (for [x (range x-dim)
+              y (range y-dim)]
+          [[x y] [tiles (valid-dirs [x y] [x-dim y-dim])]])))
+
+(get 
+ (make-grid 7 9 #{:s :l :c})
+ [0 0])
+
+(clojure.inspector/inspect-tree
+(let [matrix input-matrix-1
+      dims (dimensions matrix)
+      flat-rules (into
+                  #{}
+                  (apply concat
+                         (for [[x row] (map-indexed vector matrix)
+                               [y tile] (map-indexed vector row)]
+                           (for [[dx dy :as d] (valid-dirs [x y] dims)]
+                             (let [other-tile (get-in matrix [(+ x dx) (+ y dy)])]
+                               [tile d other-tile])))))]
+  (reduce (fn [rule-map [tile d other-tile]]
+            (update-in rule-map [tile (get compass d)] (fnil conj #{other-tile}) other-tile))
+          {}
+          flat-rules)))
+
+(update-in {:a {:b #{:c}}} [:a :b] (fnil conj #{:e}) :e)
