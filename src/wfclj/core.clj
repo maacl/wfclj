@@ -6,13 +6,6 @@
               y (range y-dim)]
           [[x y] tiles])))
 
-
-(defn valid-dirs [[x y] [max-x max-y]]
-  (map first
-       (remove (fn [[_ x y]] (or (neg? x) (neg? y) (>= x max-x) (>= y max-y)))
-          (for [dx [-1 0 1] dy (if (zero? dx) [-1 1] [-1 0 1])]
-            [[dx dy] (+ dx x) (+ dy y)]))))
-
 (defn valid-dirs [[x y] [max-x max-y]]
   (cond-> []
     (> x 0) (conj [-1 0])
@@ -64,3 +57,13 @@
 (let [matrix input-matrix-1]
   (set
    (mapcat (make-comp-mapper matrix) (coords matrix))))              
+
+(let [matrix input-matrix-1
+      dims (dimensions matrix)]
+  (into #{}
+        (apply concat
+               (for [[x row] (map-indexed vector matrix)
+                     [y tile] (map-indexed vector row)]
+                 (for [[dx dy :as d] (valid-dirs [x y] dims)]
+                   (let [other-tile (get-in matrix [(+ x dx) (+ y dy)])]
+                     [tile other-tile d]))))))
