@@ -54,7 +54,6 @@
 (def weights
   (derive-weights input-matrix-1))
 
-
 ;; main logic
 (def compass {[1 0]  :down
               [-1 0] :up
@@ -62,14 +61,10 @@
               [0 1]  :right})
 
 (defn make-grid [x-dim y-dim tiles]
-  (with-meta 
     (into (sorted-map)
           (for [x (range x-dim)
                 y (range y-dim)]
-            [[x y] [tiles (valid-dirs [x y] [x-dim y-dim])]]))
-    {:x-dim x-dim
-     :y-dim y-dim}
-    ))
+            [[x y] [tiles (valid-dirs [x y] [x-dim y-dim])]])))
 
 (defn print-grid [grid cols]
   (clojure.pprint/pprint
@@ -83,7 +78,7 @@
   [(+ x dx) (+ y dy)])
 
 (defn collapsed? [loc grid]
-  (not (second (first (get grid loc)))))
+  (= 1 (count (first (get grid loc)))))
 
 (defn fully-collapsed? [grid]
   (every? true? (map collapsed? (keys grid) (repeat grid))))
@@ -141,127 +136,128 @@
                          (shannon-entropy loc g))])
           ks (repeat grid)))))
 
-
 (defn remove-from-possible-tiles [tile loc grid]
   (update-in grid [loc 0] #(disj % tile)))
 
-
-;;(remove-from-possible-tiles :l [0 0] (make-grid 8 9 #{:s :l :c}))
-
 (defn check-compatibility [tile other-tile dir]
-    (contains? 
-     (get-in compabilities [tile dir])
-     other-tile))
+  (let [comps (get-in compabilities [tile dir]) 
+        res (contains? comps other-tile)]
+  ;;(println "checking if" other-tile " is compatible with " comps " for " tile " in direction " dir " result: " res)
+  res))
 
 (defn propagate [loc grid]
   (let [stack (atom [loc])
-        ;;tmp-stack (atom [loc])
         grid (atom grid)]
     (while (not-empty @stack)
-      ;;(do
-        ;;(println "stack start while: " @stack)
+      (println "Stack upon enter: " @stack)
       (let [[s l] [(pop @stack) (peek @stack)]
             cur-possible-tiles (tiles-loc l @grid)]
         (reset! stack s)
-        ;;(println "current possible tiles: " cur-possible-tiles)
-        ;;(println (second (get @grid l)))
-
         (doall
-        (for [direction (second (get @grid l))];; we get the precomputed valid-dirs
-          ;;(do
-          ;;(println "direction: " direction)
-          
-          (let [n (neighbour loc direction)]
-            (doall
-             (for [other-tile (tiles-loc n @grid)]
-              ;;(do
-              (let [other-tile-is-possible
-                    (some true? (map check-compatibility
-                                     cur-possible-tiles
-                                     (repeat other-tile)
-                                     (repeat direction)))]
-                ;;(println "other tile is possible:" other-tile-is-possible)
-                (when (not other-tile-is-possible)
-                  ;;(do
-                    ;;(println "rm possibility. stack is: " s)
-                    ;;(println "other tile: " other-tile)
+         (for [direction (second (get @grid l))];; we get the precomputed valid-dirs
+           (let [n (neighbour l direction)
+                 ;;dummy (println "Considering " (second (get @grid l)) " directions, for location " l)
+                 ]
+             (doall
+              (for [other-tile (tiles-loc n @grid)]
+                (let [other-tile-is-possible
+                      (some true? (map check-compatibility
+                                       cur-possible-tiles
+                                       (repeat other-tile)
+                                       (repeat direction)))]
+                  (when (not other-tile-is-possible)
                     (reset! grid (remove-from-possible-tiles other-tile n @grid))
-                    ;;(println "add to stack: " n)
-                    ;;(reset! stack #{})
-                    (reset! stack (conj s n))
-                    )))))))))
+                    ;;(println "Removed: " other-tile " from " n " because " other-tile " is not compatible with any of " cur-possible-tiles "in current cell " l  " in direction " direction )
+                    ;;(when (= l n) (println "ERROR: " l " 0 " n))
+                    ;;(println "New contents of neighbour: " n " is " (get @grid n))
+                    (println "Adding: " n " to the stack.")
+                    (swap! stack conj n)
+                    (println "New stack: " @stack))))))))))
+    ;;(clojure.pprint/pprint @grid)
     @grid))
 
 
+(defn grid-iterator [grid]
+  ;; TODO implement iterator
+  (let [[mel _] (min-entropy-loc grid)
+        new-grid (collapse-loc mel grid)]
+    (if (fully-collapsed? new-grid)
+      new-grid
+      (propagate mel new-grid))))
+
+(defn iterate-grid [grid]
+  (iterate grid-iterator grid))
+
+(defn run [grid]
+  (some (fn [g]
+          (when (fully-collapsed? g)
+            g))
+        (iterate-grid grid)))
+(let [[cols rows] [3 3]
+      grid (make-grid cols rows  #{:s :l :c})]
+  (map clojure.pprint/pprint
+       (run grid)))
 
 
-(defn wtest []
-  (let [stack (atom [[:a] [:b] [:c]])]
-    (while (not-empty @stack)
-      (doall
-      (for [e @stack]
-        (println e)))
-      (reset! stack (pop @stack)))))
+(pop [:a :b :c])
 
-(wtest)
+(print-grid
+(run (make-grid 10 10  #{:s :l :c}))
+10)
 
-            
+(clojure.pprint/pprint
+ (propagate [1 1] (swap-possible-tiles #{:s} [1 1]  (make-grid 3 3 #{:s :l :c}))))
+     
 
-(comment
-  (select-keys 
-(let [loc [0 0]
-      grid (collapse-loc loc (make-grid 8 9 #{:s :l :c}))]
-  (propagate loc grid))
-[[0 0] [0 1] [1 0]]
-  )
-(get-in compabilities [:l [1 0]])
-
-  (defn grid-iterator [grid]
-    ;; TODO implement iterator
-    (let [[mel _] (min-entropy-loc grid)
-          new-grid (collapse-loc mel grid)]
-      (reduce (fn [grid loc] (collapse-loc loc grid)) grid (keys grid))))
-
-  (defn iterate-grid [grid]
-    (iterate grid-iterator grid))
-
-  (defn run [grid]
-    (some (fn [g]
-            (when (fully-collapsed? g)
-              g))
-          (iterate-grid grid)))
+(map #(clojure.pprint/pprint (sort %))
+     (take 3 (iterate-grid test-grid)))
 
 
-  (defn check-compatibility [tile other-tile dir]
-    (contains? 
-     (get-in compabilities [tile dir])
-     other-tile))
+(def test-grid
+  {[0 0] [#{:s} [[1 0] [0 1]]],
+   [0 1] [#{:s :c} [[1 0] [0 -1] [0 1]]],
+   [0 2] [#{:s :l :c} [[1 0] [0 -1]]],
+   [1 0] [#{:s} [[-1 0] [1 0] [0 1]]],
+   [1 1] [#{:s :l :c} [[-1 0] [1 0] [0 -1] [0 1]]]
+   [1 2] [#{:s :l :c} [[-1 0] [1 0] [0 -1]]],
+   [2 0] [#{:s :l :c} [[-1 0] [0 1]]],
+   [2 1] [#{:s :l :c} [[-1 0] [0 -1] [0 1]]],
+   [2 2] [#{:s :l :c} [[-1 0] [0 -1]]]})
 
-  (shannon-entropy [0 0] (make-grid 8 9 #{:s :l :c}))
+test-grid
 
-  (run (make-grid 8 9 #{:s :l :c}))
 
-  (let [grid (make-grid 8 9 #{:s :l :c})]
-    (reduce (fn [grid loc] (collapse-loc loc grid)) grid (keys grid)))
-  (min-entropy-loc (make-grid 8 9 #{:s :l :c}))
+(check-compatibility :c :s [1 0])
+
+(clojure.pprint/pprint compabilities)
+(clojure.pprint/pprint
+ (sort
+  (flat-compabilities input-matrix-1)))
+
+(defn alt-print-grid [grid cols]
+  (clojure.pprint/pprint
+   (for [row (partition cols grid)]
+     (map (fn [[_ [l _]]] l) row))))
+
+(defn alt-rules [matrix dims]
+  (into
+   #{}
+   (apply concat
+          (for [[x row] (map-indexed vector matrix)
+                [y tile] (map-indexed vector row)]
+            (for [[dx dy :as d] (valid-dirs [x y] dims)]
+              (let [other-tile (get-in matrix [(+ x dx) (+ y dy)])]
+                [tile other-tile d]))))))
+
+(defn flat-compabilities [matrix]
+  (let [dims (dimensions matrix)]
+         (alt-rules matrix dims)))
+
+(defn check-compatibility [tile other-tile dir]
+  (contains? 
+   (get-in compabilities [tile dir])
+   other-tile))
 
 (defn update-values [m f & args]
   (into {} (for [[k v] m] [k (apply f v args)])))
 
-(comment
-(defn propagate [loc grid]
-  
-  (loop [stack [loc]
-         grid grid]
-    (if (empty? stack)
-      grid
-      (let [[stack loc] [(pop stack) (peek stack)]
-            cur-possible-tiles (tiles-loc loc)]
-        (for [direction (second (get grid loc))] ;; we get the precomputed valid-dirs
-          (for [n (neighbour loc direction)]
-            (let [other-tile-is-possible
-                  (some true? (map check-compatibility cur-possible-tiles (repeat (tiles-loc n)) (repeat direction)))]
-              (if (not other-tile-is-possible)
-                (recur stack (remove-from-possible-tiles other-tile n grid))
-                (recur (conj stack neighbour) grid)))))))))
-)
