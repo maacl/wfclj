@@ -154,12 +154,56 @@
                     (swap! stack conj n))))))))))
     @grid))
 
+
+(defn check-if-other-tile-compatible-with-current-tiles-in-direction [[grid stack] [tiles other-tile direction neighbour]]
+   (let [other-tile-is-possible
+         (some true? (map check-compatibility tiles (repeat other-tile) (repeat direction)))]
+     (if (not other-tile-is-possible)
+       [(remove-from-possible-tiles other-tile neighbour grid)
+        (conj stack neighbour)]
+       [grid stack])))
+
+(defn alt-propagate [loc grid]
+  (loop [grid grid
+         stack [loc]]
+    (if (empty? stack)
+      grid
+      (let [loc (peek stack)
+            stack (pop stack)
+            tiles (tiles-loc loc grid)
+            other-tiles (let [directions (second (get grid loc)) ;; we get the precomputed valid-dirs
+                              neighbours (map #(neighbour loc %) directions)]
+                          (for [[direction neighbour] (partition 2 (interleave directions neighbours))
+                                other-tile (tiles-loc neighbour grid)]
+                            [tiles other-tile direction neighbour]))
+            [grid stack] (reduce check-if-other-tile-compatible-with-current-tiles-in-direction [grid stack] other-tiles)]
+        (recur grid stack)))))
+
+(let [[a b] [1 2]]
+  (println a b))
+
+;; compare propagate with alt-propagate
+(let [grid (make-grid 5 5 #{:s :l :c})
+      loc [2 2]
+      grid-w-loc-collapsed (swap-possible-tiles #{:c} loc grid)
+      grid-propagated-w-propagator (propagate loc grid-w-loc-collapsed)
+      grid-propagated-w-alt-propagator (alt-propagate loc grid-w-loc-collapsed)]
+  (do 
+    (clojure.pprint/pprint grid-propagated-w-propagator)
+    (clojure.pprint/pprint grid-propagated-w-alt-propagator)
+    (println (= grid-propagated-w-propagator grid-propagated-w-alt-propagator))
+    ))
+
+(clojure.pprint/pprint
+ (propagate [1 1] (swap-possible-tiles #{:s} [1 1]  (make-grid 3 3 #{:s :l :c}))))
+     
+
 (defn grid-iterator [grid]
   (let [[mel _] (min-entropy-loc grid)
         new-grid (collapse-loc mel grid)]
     (if (fully-collapsed? new-grid)
       new-grid
-      (propagate mel new-grid))))
+      (alt-propagate mel new-grid))))
 
 (defn iterate-grid [grid]
   (iterate grid-iterator grid))
