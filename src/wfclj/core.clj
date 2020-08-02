@@ -61,10 +61,10 @@
               [0 1]  :right})
 
 (defn make-grid [x-dim y-dim tiles]
-    (into (sorted-map)
-          (for [x (range x-dim)
-                y (range y-dim)]
-            [[x y] [tiles (valid-dirs [x y] [x-dim y-dim])]])))
+  (into (sorted-map)
+        (for [x (range x-dim)
+              y (range y-dim)]
+          [[x y] [tiles (valid-dirs [x y] [x-dim y-dim])]])))
 
 (defn print-grid [grid cols]
   (clojure.pprint/pprint
@@ -179,10 +179,7 @@
             [grid stack] (reduce check-if-other-tile-compatible-with-current-tiles-in-direction [grid stack] other-tiles)]
         (recur grid stack)))))
 
-(let [[a b] [1 2]]
-  (println a b))
-
-;; compare propagate with alt-propagate
+;; compare alt-propagate w. propagate
 (let [grid (make-grid 5 5 #{:s :l :c})
       loc [2 2]
       grid-w-loc-collapsed (swap-possible-tiles #{:c} loc grid)
@@ -215,5 +212,10 @@
         (iterate-grid grid)))
 
 (print-grid
- (run (make-grid 10 10  #{:s :l :c}))
-10)
+ (run (make-grid 20 20  #{:s :l :c}))
+20)
+
+
+;; Refactorings:
+;; Spell compabilities correctly
+;; Attach weights and compabilities to grid, extract in check-if-other-tile-compatible-with-current-tiles-in-direction and pass to check-compatibility
