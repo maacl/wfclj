@@ -1,7 +1,9 @@
 (ns wfclj.core
   (:require [clojure.inspector]
             [clojure.set]
-            [clojure.pprint]))
+            [clojure.pprint]
+            [clojure.term.colors :refer :all]
+            [clansi :refer :all]))
 
 ;;shared logic
 (defn valid-dirs [[x y] [max-x max-y]]
@@ -12,16 +14,6 @@
     (< y (dec max-y)) (conj [0 1])))
 
 ;; derive compatibillities and weights
-(def input-matrix-1
-  [[:l :l :l :l]
-   [:l :l :l :l]
-   [:l :l :l :l]
-   [:l :l :l :l]
-   [:l :c :c :l]
-   [:c :s :s :c]
-   [:s :s :s :s]
-   [:s :s :s :s]])
-
 (defn dimensions [matrix]
   [(count matrix)
    (count (first matrix))])
@@ -31,16 +23,15 @@
    (apply concat matrix)))
 
 (defn rules [matrix dims]
-  (into
-   #{}
-   (apply concat
-          (for [[x row] (map-indexed vector matrix)
-                [y tile] (map-indexed vector row)]
-            (for [[dx dy :as d] (valid-dirs [x y] dims)]
-              (let [other-tile (get-in matrix [(+ x dx) (+ y dy)])]
-                [tile d other-tile]))))))
+  (into #{}
+        (apply concat
+               (for [[x row] (map-indexed vector matrix)
+                     [y tile] (map-indexed vector row)]
+                 (for [[dx dy :as d] (valid-dirs [x y] dims)]
+                   (let [other-tile (get-in matrix [(+ x dx) (+ y dy)])]
+                     [tile d other-tile]))))))
 
-(defn derive-compabilities [matrix]
+(defn derive-compatibillities [matrix]
   (let [dims (dimensions matrix)
         flat-rules (rules matrix dims)]
     (reduce (fn [rule-map [tile d other-tile]]
@@ -48,28 +39,28 @@
             {}
             flat-rules)))
 
-(def compabilities
-  (derive-compabilities input-matrix-1))
-
-(def weights
-  (derive-weights input-matrix-1))
-
 ;; main logic
-(def compass {[1 0]  :down
-              [-1 0] :up
-              [0 -1] :left
-              [0 1]  :right})
-
 (defn make-grid [x-dim y-dim tiles]
-  (into (sorted-map)
-        (for [x (range x-dim)
-              y (range y-dim)]
-          [[x y] [tiles (valid-dirs [x y] [x-dim y-dim])]])))
+  (with-meta
+    (into (sorted-map)
+          (for [x (range x-dim)
+                y (range y-dim)]
+            [[x y] [tiles (valid-dirs [x y] [x-dim y-dim])]]))
+    {:cols x-dim}))
 
-(defn print-grid [grid cols]
-  (clojure.pprint/pprint
-   (for [row (partition cols grid)]
-     (map (fn [[_ [l _]]] (first l)) row))))
+(defn colorize [kw]
+  (get {:l (style "l" :bg-green)
+       :c (style "c" :bg-yellow)
+        :s (style "s" :bg-blue)}
+       kw))
+
+(defn print-grid [grid]
+  (let [cols (:cols (meta grid))]
+    (clojure.pprint/pprint
+     (for [row (partition cols grid)]
+       (apply str
+              (map (fn [[_ [l _]]]
+                     (colorize (first l))) row))))))
 
 (defn collapsed-val [loc grid]
   (ffirst (get grid loc)))
@@ -81,7 +72,9 @@
   (= 1 (count (first (get grid loc)))))
 
 (defn fully-collapsed? [grid]
-  (every? true? (map collapsed? (keys grid) (repeat grid))))
+  (when
+      (every? true? (map collapsed? (keys grid) (repeat grid)))
+    grid))
 
 (defn tiles-loc [loc grid]
   (first (get grid loc)))  
@@ -97,11 +90,11 @@
 
 (defn collapse-loc [loc grid]
   (let [choice (weighted-rand-choice
-                (select-keys weights (seq (tiles-loc loc grid))))]
+                (select-keys (:weights (meta grid)) (seq (tiles-loc loc grid))))]
     (swap-possible-tiles #{choice} loc grid)))
 
 (defn shannon-entropy [loc grid]
-  (let [weights (vals (select-keys weights (seq (tiles-loc loc grid))))
+  (let [weights (vals (select-keys (:weights (meta grid)) (seq (tiles-loc loc grid))))
         [sw swlw] (reduce (fn [[sw swlw] w]
                             [(+ sw w) (+ swlw (* w (Math/log w)))])
                           [0 0]
@@ -128,42 +121,26 @@
 (defn remove-from-possible-tiles [tile loc grid]
   (update-in grid [loc 0] #(disj % tile)))
 
-(defn check-compatibility [tile other-tile dir]
-  (let [comps (get-in compabilities [tile dir])]
-       (contains? comps other-tile)))
-
-(defn propagate [loc grid]
-  (let [stack (atom [loc])
-        grid (atom grid)]
-    (while (not-empty @stack)
-      (let [[s l] [(pop @stack) (peek @stack)]
-            cur-possible-tiles (tiles-loc l @grid)]
-        (reset! stack s)
-        (doall
-         (for [direction (second (get @grid l))];; we get the precomputed valid-dirs
-           (let [n (neighbour l direction)]
-             (doall
-              (for [other-tile (tiles-loc n @grid)]
-                (let [other-tile-is-possible
-                      (some true? (map check-compatibility
-                                       cur-possible-tiles
-                                       (repeat other-tile)
-                                       (repeat direction)))]
-                  (when (not other-tile-is-possible)
-                    (reset! grid (remove-from-possible-tiles other-tile n @grid))
-                    (swap! stack conj n))))))))))
-    @grid))
-
+(defn check-compatibility [tile other-tile dir grid]
+  (let [comps (get-in (:comps (meta grid)) [tile dir])]
+    (contains? comps other-tile)))
 
 (defn check-if-other-tile-compatible-with-current-tiles-in-direction [[grid stack] [tiles other-tile direction neighbour]]
-   (let [other-tile-is-possible
-         (some true? (map check-compatibility tiles (repeat other-tile) (repeat direction)))]
-     (if (not other-tile-is-possible)
-       [(remove-from-possible-tiles other-tile neighbour grid)
-        (conj stack neighbour)]
-       [grid stack])))
+  (let [other-tile-is-possible
+        (some true? (map check-compatibility tiles (repeat other-tile) (repeat direction) (repeat grid)))]
+    (if (not other-tile-is-possible)
+      [(remove-from-possible-tiles other-tile neighbour grid)
+       (conj stack neighbour)]
+      [grid stack])))
 
-(defn alt-propagate [loc grid]
+(defn get-other-tiles [grid loc tiles]
+  (let [directions (second (get grid loc)) ;; we get the precomputed valid-dirs
+        neighbours (map #(neighbour loc %) directions)]
+    (for [[direction neighbour] (partition 2 (interleave directions neighbours))
+          other-tile (tiles-loc neighbour grid)]
+      [tiles other-tile direction neighbour])))
+
+(defn propagate [loc grid]
   (loop [grid grid
          stack [loc]]
     (if (empty? stack)
@@ -171,51 +148,48 @@
       (let [loc (peek stack)
             stack (pop stack)
             tiles (tiles-loc loc grid)
-            other-tiles (let [directions (second (get grid loc)) ;; we get the precomputed valid-dirs
-                              neighbours (map #(neighbour loc %) directions)]
-                          (for [[direction neighbour] (partition 2 (interleave directions neighbours))
-                                other-tile (tiles-loc neighbour grid)]
-                            [tiles other-tile direction neighbour]))
+            other-tiles (get-other-tiles grid loc tiles)
             [grid stack] (reduce check-if-other-tile-compatible-with-current-tiles-in-direction [grid stack] other-tiles)]
         (recur grid stack)))))
-
-;; compare alt-propagate w. propagate
-(let [grid (make-grid 5 5 #{:s :l :c})
-      loc [2 2]
-      grid-w-loc-collapsed (swap-possible-tiles #{:c} loc grid)
-      grid-propagated-w-propagator (propagate loc grid-w-loc-collapsed)
-      grid-propagated-w-alt-propagator (alt-propagate loc grid-w-loc-collapsed)]
-  (do 
-    (clojure.pprint/pprint grid-propagated-w-propagator)
-    (clojure.pprint/pprint grid-propagated-w-alt-propagator)
-    (println (= grid-propagated-w-propagator grid-propagated-w-alt-propagator))
-    ))
-
-(clojure.pprint/pprint
- (propagate [1 1] (swap-possible-tiles #{:s} [1 1]  (make-grid 3 3 #{:s :l :c}))))
-     
 
 (defn grid-iterator [grid]
   (let [[mel _] (min-entropy-loc grid)
         new-grid (collapse-loc mel grid)]
     (if (fully-collapsed? new-grid)
       new-grid
-      (alt-propagate mel new-grid))))
+      (propagate mel new-grid))))
 
 (defn iterate-grid [grid]
   (iterate grid-iterator grid))
 
 (defn run [grid]
-  (some (fn [g]
-          (when (fully-collapsed? g)
-            g))
-        (iterate-grid grid)))
+  (some fully-collapsed? (iterate-grid grid)))
+
+(defn derive-and-run [grid matrix]
+  (let [compatibillities (derive-compatibillities matrix)
+        weights (derive-weights matrix)]
+    (run
+      (vary-meta grid merge {:comps compatibillities :weights weights}))))
+
+(def input-matrix-1
+  [[:l :l :l :l]
+   [:l :l :l :l]
+   [:l :l :l :l]
+   [:l :c :c :l]
+   [:c :s :s :c]
+   [:s :s :s :s]
+   [:s :s :s :s]])
+
+(def input-matrix-2
+  [[:A :A :A :A]
+   [:A :A :A :A]
+   [:A :A :A :A]
+   [:A :C :C :A]
+   [:C :B :B :C]
+   [:C :B :B :C]
+   [:C :B :B :C]])
 
 (print-grid
- (run (make-grid 20 20  #{:s :l :c}))
-20)
-
-
-;; Refactorings:
-;; Spell compabilities correctly
-;; Attach weights and compabilities to grid, extract in check-if-other-tile-compatible-with-current-tiles-in-direction and pass to check-compatibility
+ (derive-and-run (make-grid 20 20  #{:l :c :s}) input-matrix-1)
+ ;;(derive-and-run (make-grid 20 20  #{:A :B :C}) input-matrix-2)
+ )
