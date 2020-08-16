@@ -2,7 +2,6 @@
   (:require [clojure.inspector]
             [clojure.set]
             [clojure.pprint]
-            [clojure.term.colors :refer :all]
             [clansi :refer :all]))
 
 ;;shared logic
@@ -50,17 +49,21 @@
 
 (defn colorize [kw]
   (get {:l (style "l" :bg-green)
-       :c (style "c" :bg-yellow)
-        :s (style "s" :bg-blue)}
+        :c (style "c" :bg-yellow)
+        :s (style "s" :bg-blue)
+        :A (style "A" :bg-green)
+        :B (style "B" :bg-black)
+        :C (style "C" :bg-yellow)}
        kw))
 
 (defn print-grid [grid]
   (let [cols (:cols (meta grid))]
-    (clojure.pprint/pprint
+    (println
+     (clojure.string/join "\n"
      (for [row (partition cols grid)]
        (apply str
               (map (fn [[_ [l _]]]
-                     (colorize (first l))) row))))))
+                     (colorize (first l))) row)))))))
 
 (defn collapsed-val [loc grid]
   (ffirst (get grid loc)))
@@ -171,6 +174,13 @@
     (run
       (vary-meta grid merge {:comps compatibillities :weights weights}))))
 
+(defn make-grid-and-run [x-dim y-dim input-matrix]
+  (let [compatibillities (derive-compatibillities input-matrix)
+        weights (derive-weights input-matrix)
+        tiles (set (keys weights))]
+    (run
+      (vary-meta (make-grid x-dim y-dim tiles) merge {:comps compatibillities :weights weights}))))
+
 (def input-matrix-1
   [[:l :l :l :l]
    [:l :l :l :l]
@@ -190,6 +200,9 @@
    [:C :B :B :C]])
 
 (print-grid
- (derive-and-run (make-grid 20 20  #{:l :c :s}) input-matrix-1)
+ (make-grid-and-run 20 20 input-matrix-1))
+
+(print-grid
+ (derive-and-run (make-grid 20 20 #{:l :c :s}) input-matrix-1)
  ;;(derive-and-run (make-grid 20 20  #{:A :B :C}) input-matrix-2)
  )

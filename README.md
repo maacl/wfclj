@@ -1,22 +1,19 @@
 # wfclj
 
-A Clojure library designed to ... well, that part is up to you.
+A Clojure implementation of the Wave Function Collapse algorithm invented by Maxim Gumin.
+
+https://github.com/mxgmn/WaveFunctionCollapse
+
+This implementation is inspired by the Python version referenced in this article: https://robertheaton.com/2018/12/17/wavefunction-collapse-algorithm/
 
 ## Usage
 
-FIXME
+(print-grid
+ (make-grid-and-run 20 20 input-matrix-1))
+ 
+ This will derive the weights and compatibilities from the tiles in input-matrix-1, construct a 20 x 20 grid based on these, and run the algorithm on it. 
 
 ## License
 
-Copyright © 2020 FIXME
-
-This program and the accompanying materials are made available under the
-terms of the Eclipse Public License 2.0 which is available at
-http://www.eclipse.org/legal/epl-2.0.
-
-This Source Code may also be made available under the following Secondary
-Licenses when the conditions for such availability set forth in the Eclipse
-Public License, v. 2.0 are satisfied: GNU General Public License as published by
-the Free Software Foundation, either version 2 of the License, or (at your
-option) any later version, with the GNU Classpath Exception which is available
-at https://www.gnu.org/software/classpath/license.html.
+Apache 2.0
+Copyright © 2020 Martin Clausen
