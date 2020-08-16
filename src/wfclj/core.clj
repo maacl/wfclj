@@ -1,6 +1,5 @@
 (ns wfclj.core
-  (:require [clojure.inspector]
-            [clojure.set]
+  (:require [clojure.set]
             [clojure.pprint]
             [clansi :refer :all]))
 
