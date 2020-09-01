@@ -2,6 +2,8 @@
 
 A pure Clojure implementation of the Wave Function Collapse [algorithm](https://github.com/mxgmn/WaveFunctionCollapse) invented by Maxim Gumin.
 
+![wfc](https://github.com/maacl/wfclj/wfc.png)
+
 This implementation is inspired by the Python version referenced in this [article](https://robertheaton.com/2018/12/17/wavefunction-collapse-algorithm/). 
 
 ## Usage
