@@ -1,14 +1,14 @@
 (ns wfclj.core
   (:require [clojure.set]
-            [clojure.pprint]
-            [clansi :refer :all]))
+            [clojure.string :refer [join]]
+            [clansi :refer [style]]))
 
 ;;shared logic
 (defn valid-dirs [[x y] [max-x max-y]]
   (cond-> []
-    (> x 0) (conj [-1 0])
+    (pos? x) (conj [-1 0])
     (< x (dec max-x)) (conj [1 0])
-    (> y 0) (conj [0 -1])
+    (pos? y) (conj [0 -1])
     (< y (dec max-y)) (conj [0 1])))
 
 ;; derive compatibillities and weights
@@ -17,8 +17,7 @@
    (count (first matrix))])
 
 (defn derive-weights [matrix]
-  (frequencies
-   (apply concat matrix)))
+  (frequencies (flatten matrix)))
 
 (defn rules [matrix dims]
   (into #{}
@@ -58,14 +57,11 @@
 (defn print-grid [grid]
   (let [cols (:cols (meta grid))]
     (println
-     (clojure.string/join "\n"
-     (for [row (partition cols grid)]
-       (apply str
-              (map (fn [[_ [l _]]]
-                     (colorize (first l))) row)))))))
-
-(defn collapsed-val [loc grid]
-  (ffirst (get grid loc)))
+     (join "\n"
+           (for [row (partition cols grid)]
+             (apply str
+                    (map (fn [[_ [l _]]]
+                           (colorize (first l))) row)))))))
 
 (defn neighbour [[x y] [dx dy]]
   [(+ x dx) (+ y dy)])
@@ -75,11 +71,11 @@
 
 (defn fully-collapsed? [grid]
   (when
-      (every? true? (map collapsed? (keys grid) (repeat grid)))
+   (every? true? (map collapsed? (keys grid) (repeat grid)))
     grid))
 
 (defn tiles-loc [loc grid]
-  (first (get grid loc)))  
+  (first (get grid loc)))
 
 (defn swap-possible-tiles [tiles loc grid]
   (assoc-in grid [loc 0] tiles))
@@ -88,7 +84,7 @@
 (defn weighted-rand-choice [m]
   (let [w (reductions #(+ % %2) (vals m))
         r (rand-int (last w))]
-    (nth (keys m) (count (take-while #( <= % r ) w)))))
+    (nth (keys m) (count (take-while #(<= % r) w)))))
 
 (defn collapse-loc [loc grid]
   (let [choice (weighted-rand-choice
@@ -103,10 +99,11 @@
                           weights)]
     (- (Math/log sw) (/ swlw sw))))
 
-(defn kv-for-min-val [m]
+(defn kv-for-min-val
   "Returns the [key value] for the minimum v found in m."
+  [m]
   (reduce (fn [[k1 v1]
-              [k2 v2]]
+               [k2 v2]]
             (if (< v2 v1)
               [k2 v2]
               [k1 v1]))
@@ -116,8 +113,8 @@
   (kv-for-min-val
    (let [ks (remove #(collapsed? % grid) (keys grid))] ;; filter out collapsed locations
      (map (fn [loc g] [loc
-                      (- (/ (rand) 1000)
-                         (shannon-entropy loc g))])
+                       (- (/ (rand) 1000)
+                          (shannon-entropy loc g))])
           ks (repeat grid)))))
 
 (defn remove-from-possible-tiles [tile loc grid]
@@ -130,10 +127,10 @@
 (defn check-if-other-tile-compatible-with-current-tiles-in-direction [[grid stack] [tiles other-tile direction neighbour]]
   (let [other-tile-is-possible
         (some true? (map check-compatibility tiles (repeat other-tile) (repeat direction) (repeat grid)))]
-    (if (not other-tile-is-possible)
+    (if other-tile-is-possible
+      [grid stack]
       [(remove-from-possible-tiles other-tile neighbour grid)
-       (conj stack neighbour)]
-      [grid stack])))
+       (conj stack neighbour)])))
 
 (defn get-other-tiles [grid loc tiles]
   (let [directions (second (get grid loc)) ;; we get the precomputed valid-dirs
@@ -157,28 +154,26 @@
 (defn grid-iterator [grid]
   (let [[mel _] (min-entropy-loc grid)
         new-grid (collapse-loc mel grid)]
-    (if (fully-collapsed? new-grid)
-      new-grid
-      (propagate mel new-grid))))
-
-(defn iterate-grid [grid]
-  (iterate grid-iterator grid))
+    (or
+     (fully-collapsed? new-grid)
+     (propagate mel new-grid))))
 
 (defn run [grid]
-  (some fully-collapsed? (iterate-grid grid)))
+  (some fully-collapsed?
+        (iterate grid-iterator grid)))
 
 (defn derive-and-run [grid matrix]
   (let [compatibillities (derive-compatibillities matrix)
         weights (derive-weights matrix)]
     (run
-      (vary-meta grid merge {:comps compatibillities :weights weights}))))
+     (vary-meta grid merge {:comps compatibillities :weights weights}))))
 
 (defn make-grid-and-run [x-dim y-dim input-matrix]
   (let [compatibillities (derive-compatibillities input-matrix)
         weights (derive-weights input-matrix)
         tiles (set (keys weights))]
     (run
-      (vary-meta (make-grid x-dim y-dim tiles) merge {:comps compatibillities :weights weights}))))
+     (vary-meta (make-grid x-dim y-dim tiles) merge {:comps compatibillities :weights weights}))))
 
 (def input-matrix-1
   [[:l :l :l :l]

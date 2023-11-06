@@ -23,3 +23,6 @@ There is another Clojure version of the WFC alogrithm [here](https://github.com/
 
 Apache 2.0
 Copyright © 2020 Martin Clausen
+
+## Thanks
+Reddit user u/deaddyfreddy for refactoring tips.
